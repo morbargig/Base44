@@ -2,6 +2,18 @@
 
 AI-powered web app builder. The backend is a FastAPI service; the frontend is a Vite/React app.
 
+## Production Services
+
+Production service checklist:
+
+- [x] `flowbolt-flapi-mock` - Render web service for production API docs and mock auth/API endpoints. URL: https://iagent-lsm1.onrender.com/api-docs
+- [ ] `flowbolt-backend` - Render web service for app generation, API routes, WebSockets, publishing, and shared app serving.
+- [ ] `flowbolt-postgres` - Render PostgreSQL database for backend application state.
+- [ ] `flowbolt-minio` - Render private service for S3-compatible published/shared app asset storage.
+- [ ] Frontend static site - GitHub Pages build output for the Vite/React frontend. Current source still needs same-origin backend routing or configurable backend URLs for full production functionality.
+
+For deployment details, see `DEPLOYMENT.md`.
+
 ---
 
 ## Prerequisites
