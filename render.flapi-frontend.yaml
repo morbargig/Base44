@@ -1,0 +1,18 @@
+# Phase 1 deployment: FLAPI mock on Render, frontend on GitHub Pages.
+#
+# Render auto-detects only a root render.yaml. To use this file, either:
+# - create the FLAPI service manually in the Render dashboard using these values, or
+# - temporarily copy this file to render.yaml while creating a Blueprint.
+
+services:
+  - type: web
+    name: flowbolt-flapi-mock
+    runtime: node
+    plan: free
+    rootDir: mocks/flapi-mock
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
+    startCommand: MOCK_PORT=$PORT pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: development

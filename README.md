@@ -131,6 +131,8 @@ make stop
 
 The app is served by nginx at **http://localhost:8888**.
 
+For the Render + GitHub Pages deployment path, see `DEPLOYMENT.md`.
+
 ### Services and ports
 
 | Service             | Port(s) |

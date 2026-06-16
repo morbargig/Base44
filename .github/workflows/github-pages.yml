@@ -1,0 +1,60 @@
+name: GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - name: Build
+        run: pnpm exec tsc -b && pnpm exec vite build --base "$VITE_BASE_PATH"
+        working-directory: frontend
+        env:
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || format('/{0}/', github.event.repository.name) }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_WS_BASE_URL: ${{ vars.VITE_WS_BASE_URL }}
+          VITE_AUTH_PROVIDER_URL: ${{ vars.VITE_AUTH_PROVIDER_URL }}
+          VITE_AUTH_STORAGE_KEY: ${{ vars.VITE_AUTH_STORAGE_KEY || 'Auth' }}
+          VITE_AUTH_USE_IFRAME: ${{ vars.VITE_AUTH_USE_IFRAME || 'true' }}
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

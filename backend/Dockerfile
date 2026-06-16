@@ -1,5 +1,5 @@
 # Build stage for nsjail
-FROM python:3.12-slim AS nsjail-builder
+FROM python:3.13-slim AS nsjail-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
@@ -23,7 +23,7 @@ RUN git clone --depth 1 --branch 3.4 https://github.com/google/nsjail.git /tmp/n
     && mv /tmp/nsjail/nsjail /usr/bin/nsjail
 
 # Final stage
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -72,12 +72,9 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Use namespaced sandbox mode in container (nsjail isolation)
-ENV AIB_SANDBOX_MODE=namespaced
-
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD-SHELL curl -f "http://localhost:${PORT:-8000}/health" || exit 1
 
 CMD ["uv", "run", "--no-sync", "start"]
