@@ -1,0 +1,141 @@
+name: Deploy FLAPI Mock to Render
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+    paths:
+      - mocks/flapi-mock/**
+      - .github/workflows/deploy-flapi.yml
+      - render.flapi-frontend.yaml
+
+concurrency:
+  group: deploy-flapi
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}
+  DOCKER_IMAGE: ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/flowbolt-flapi-mock
+  RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_FLAPI_DEPLOY_HOOK || vars.RENDER_FLAPI_DEPLOY_HOOK }}
+
+jobs:
+  deploy-flapi:
+    name: Deploy FLAPI Mock
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set build metadata
+        id: build-meta
+        run: |
+          echo "build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
+          APP_VERSION="$(node -p "require('./mocks/flapi-mock/package.json').version")"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: mocks/flapi-mock/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: mocks/flapi-mock
+
+      - name: Verify FLAPI mock package
+        run: pnpm exec tsc --noEmit
+        working-directory: mocks/flapi-mock
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify deployment configuration
+        run: |
+          if [[ -z "${{ env.DOCKER_USERNAME }}" ]]; then
+            echo "DOCKER_USERNAME repository variable is not configured"
+            exit 1
+          fi
+
+          if [[ "${{ secrets.DOCKER_TOKEN != '' || vars.DOCKER_TOKEN != '' }}" != "true" ]]; then
+            echo "DOCKER_TOKEN secret or repository variable is not configured"
+            exit 1
+          fi
+
+          if [[ "${{ secrets.RENDER_FLAPI_DEPLOY_HOOK != '' || vars.RENDER_FLAPI_DEPLOY_HOOK != '' }}" != "true" ]]; then
+            echo "RENDER_FLAPI_DEPLOY_HOOK secret or repository variable is not configured"
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN || vars.DOCKER_TOKEN }}
+
+      - name: Generate Docker image metadata
+        id: docker-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.created=${{ steps.build-meta.outputs.build_date }}
+            org.opencontainers.image.version=${{ steps.build-meta.outputs.app_version }}
+
+      - name: Build and push FLAPI mock Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: mocks/flapi-mock
+          file: mocks/flapi-mock/Dockerfile
+          push: true
+          tags: ${{ steps.docker-meta.outputs.tags }}
+          labels: ${{ steps.docker-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trigger Render deployment
+        run: |
+          HOOK_URL="${{ env.RENDER_DEPLOY_HOOK }}"
+          if [[ "$HOOK_URL" != *"clearCache="* ]]; then
+            if [[ "$HOOK_URL" == *"?"* ]]; then
+              HOOK_URL="${HOOK_URL}&clearCache=true"
+            else
+              HOOK_URL="${HOOK_URL}?clearCache=true"
+            fi
+          fi
+
+          RESPONSE=$(curl -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            -s)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Render response status: $HTTP_CODE"
+          echo "Render response body: $BODY"
+
+          if [[ "$HTTP_CODE" == "200" ]] || [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "202" ]]; then
+            echo "Render deployment triggered successfully."
+          else
+            echo "Render deployment hook returned status: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "FLAPI mock image pushed: ${{ env.DOCKER_IMAGE }}"
+          echo "Commit: ${{ github.sha }}"

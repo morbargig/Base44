@@ -6,6 +6,9 @@ export interface MockPackageConfig {
   getResults: (quickParams: Record<string, unknown>) => Record<string, unknown>;
 }
 
+const hasValueProperty = (value: unknown): value is { Value: unknown } =>
+  typeof value === 'object' && value !== null && 'Value' in value;
+
 export class MockPackage {
   metadata: PackageMetadata;
   quickParams: Record<string, QuickParamDefinition[]>;
@@ -49,7 +52,7 @@ export class MockPackage {
       const hasDefault = paramDef.Value && paramDef.Value.length > 0;
 
       if (!(paramName in providedParams) && hasDefault) {
-        const defaultValues = paramDef.Value.map((v) => v.Value);
+        const defaultValues = paramDef.Value.map((v) => (hasValueProperty(v) ? v.Value : v));
         finalParams[paramName] = paramDef.IsSingleValue ? defaultValues[0] : defaultValues;
       }
     }
