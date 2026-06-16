@@ -8,6 +8,10 @@ on:
       - main
       - develop
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

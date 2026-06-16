@@ -45,6 +45,7 @@ jobs:
   e2e:
     name: E2E tests (playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -57,22 +58,13 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: playwright-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
+        timeout-minutes: 10
         working-directory: frontend
-      - name: Install Playwright system deps only
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
-        working-directory: frontend
-      - run: pnpm test:e2e
+      - name: Run Playwright E2E
+        run: pnpm test:e2e
+        timeout-minutes: 20
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: failure()
